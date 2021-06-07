@@ -1,0 +1,319 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+##Load libraries
+```{r}
+library(reshape2); 
+library(vegan); 
+library(dplyr)
+library(ade4); 
+library(plotly)
+library(compositions); 
+library(pracma); 
+library(DESeq2); 
+library(fpc); 
+library(tidyverse)
+library(purrr)
+library(cluster)
+library(RColorBrewer)
+library(ape)
+```
+
+##Plotting ASV Relative Abundances
+
+##All ASVs
+```{r}
+inc_data_inc = read.table("SP2018_tax_2m_sheet.txt",header=T, sep ="\t") ##load table
+pcm <- melt(inc_data_inc, id = c("Taxonomy")) ##create long-form table
+condition <- pcm$Taxonomy ##define plotting variable
+dates <- pcm$variable ##define plotting variable
+p <- ggplot(pcm, aes(fill=condition,y=value, x=dates)) + geom_bar(position="fill", stat="identity")+ theme_bw()+theme(axis.text.x=element_text(angle=90,hjust=1))+scale_fill_brewer(palette = "Paired") ##plot stacked bars
+
+inc_data_inc2 = read.table("SP2018_tax_3m_sheet.txt",header=T, sep ="\t") ##load table
+pcm2 <- melt(inc_data_inc2, id = c("Taxonomy")) ##create long-form table
+condition2 <- pcm2$Taxonomy ##define plotting variable
+dates2 <- pcm2$variable ##define plotting variable
+q <- ggplot(pcm2, aes(fill=condition2,y=value, x=dates2)) + geom_bar(position="fill", stat="identity")+ theme_bw()+theme(axis.text.x=element_text(angle=90,hjust=1))+scale_fill_brewer(palette = "Paired") ##plot stacked bars
+
+inc_data_inc3 = read.table("SP2018_tax_4m_sheet.txt",header=T, sep ="\t") ## load table
+pcm3 <- melt(inc_data_inc3, id = c("Taxonomy")) ##create long-form table
+condition3 <- pcm3$Taxonomy ##define plotting variable
+dates3 <- pcm3$variable ##define plotting variable
+s <- ggplot(pcm3, aes(fill=condition3,y=value, x=dates3)) + geom_bar(position="fill", stat="identity")+ theme_bw()+theme(axis.text.x=element_text(angle=90,hjust=1))+scale_fill_brewer(palette = "Paired") ##plot stacked bars
+```
+
+##Syndiniales
+```{r}
+inc_data_inc = read.table("SP2018_syn_2m_sheet.txt",header=T, sep ="\t")
+pcm <- melt(inc_data_inc, id = c("Taxonomy"))
+condition <- pcm$Taxonomy
+dates <- pcm$variable
+p <- ggplot(pcm, aes(fill=condition,y=value, x=dates)) + ylim(0,0.15) + geom_bar(position="stack", stat="identity")+ theme_bw()+scale_fill_brewer(palette = "YlOrRd")
+
+inc_data_inc2 = read.table("SP2018_syn_3m_sheet.txt",header=T, sep ="\t")
+pcm2 <- melt(inc_data_inc2, id = c("Taxonomy"))
+condition2 <- pcm2$Taxonomy
+dates2 <- pcm2$variable
+q <- ggplot(pcm2, aes(fill=condition2,y=value, x=dates2)) + ylim(0,0.15) + geom_bar(position="stack", stat="identity")+ theme_bw()+scale_fill_brewer(palette = "YlOrRd")
+
+inc_data_inc3 = read.table("SP2018_syn_4m_sheet.txt",header=T, sep ="\t")
+pcm3 <- melt(inc_data_inc3, id = c("Taxonomy"))
+condition3 <- pcm3$Taxonomy
+dates3 <- pcm3$variable
+s <- ggplot(pcm3, aes(fill=condition3,y=value, x=dates3)) + geom_bar(position="stack", stat="identity")+ theme_bw()+theme(axis.text.x=element_text(angle=90,hjust=1))+scale_fill_brewer(palette = "YlOrRd")
+
+```
+
+
+##Clustering tutorial from Sarah Hu
+    ```{r}
+raw = read.table("SP2018_2m_forCluster.txt",header=T, sep ="\t") ##import table
+summary(raw) ##summary statistics
+count.filtered <- raw 
+names(count.filtered)
+seq_counts<-count.filtered[1:60] ##create table with only counts
+tax_key<-count.filtered[c(1,61)]; head(tax_key[1:2,]) ##create taxonomic key for ASVs
+colnames(tax_key)[2] <- 'taxonomy'
+tax_key$taxonomy_copy <- tax_key$taxonomy
+tax_key <- tax_key %>%
+separate(taxonomy_copy, into = c('Level1', 'Level2','Level3', 'Level4', 'Level5', 'Level6', 'Level7'), sep = ';') ##create new columns for levels
+head(seq_counts[1:3]) ##check table
+seq_counts$ASV_L7_ID<-NULL; head(seq_counts[1:3]) ##remove ASV IDs
+str(seq_counts)
+##construct covariance matrix
+covariance_matrix<-as.matrix(seq_counts)%*%t(seq_counts)
+cov_determinant<-det(covariance_matrix)
+cov_determinant
+##transform data using log-ratio
+log_rats<-data.frame(compositions::ilr(t(seq_counts)))
+new_covdet<-det(as.matrix(log_rats)%*%t(log_rats))
+new_covdet
+##PCA plotting
+lograt_pca<-prcomp(log_rats)
+lograt_variances<-lograt_pca$sdev^2/sum(lograt_pca$sdev^2)
+barplot(lograt_variances,
++         main='Log-Ratio PCA Screeplot',
++         xlab='Axis',
++         ylab='% Variance',
++         col=c(rep('black',1),rep('grey',18)))
+legend('topright',fill=c('black','grey'),c('Should Present','??? Judgment Call'))
+row.names(lograt_pca$x)
+
+pca_lograt_frame<-data.frame(lograt_pca$x,
+                             month=gsub('\\w\\d|\\w\\d\\d','',rownames(lograt_pca$x)))
+ggplot(pca_lograt_frame)+
+    geom_point(aes(x=PC1,y=PC2,col=month), cex=2.0)+
+    ylab(paste0('PC2 ',round(lograt_variances[2]*100,2),'%'))+
+    xlab(paste0('PC1 ',round(lograt_variances[1]*100,2),'%'))+
+    scale_color_brewer(palette='Set1',name='Month')+
+    ggtitle('Log-Ratio PCA Ordination')+
+    coord_fixed(ratio=lograt_variances[2]/lograt_variances[1])+
+    theme_bw()
+```
+
+##Distance Matrices
+```{r}
+##Jaccard distance matrix
+jac_dmat<-vegdist(t(seq_counts),method="jaccard")
+pcoa_jac<-ape::pcoa(jac_dmat)
+samp_no<-dim(seq_counts)[2]
+jac_variances<-pcoa_jac$values$Relative_eig
+barplot(jac_variances,
++         main='Jaccard PCoA Screeplot',
++         xlab='Axis',
++         ylab='% Variance',
++         col=c(rep('black',3),rep('grey',16)),
++         cex.lab=1.5,cex.main=1.5)
+legend('topright',fill=c('black','grey'),c('Should Present','Unnecessary to Present'),cex=1.5)
+
+##Euclidean distancce matrix
+euc_dmat<-dist(log_rats)
+pcoa_euc<-ape::pcoa(euc_dmat)
+euc_variances<-pcoa_euc$values$Relative_eig
+barplot(euc_variances,
++         main='Euclidean PCoA Screeplot',
++         xlab='Axis',
++         ylab='% Variance',
++         col=c(rep('black',2),rep('darkgrey',2),rep('lightgrey',17)),
++         cex.main=1.5,cex.lab=1.5)
+legend('topright',fill=c('black','darkgrey','lightgrey'),c('Should Present','Questionable','Unnecessary'),cex=1.5)
+
+##Plot 3D PCoA
+pcoa_jac_frame<-data.frame(pcoa_jac$vectors,month=gsub('\\w\\d|\\w\\d\\d','',rownames(pcoa_jac$vectors)))
+eigenvalues<-round(jac_variances,4)*100
+plot_ly(pcoa_jac_frame,type='scatter3d',mode='markers',x=~Axis.1,y=~Axis.2,z=~Axis.3,colors=~brewer.pal(6,'Set1'),color=~month)%>%
++     layout(title='PCoA Jaccard Distance',
++            scene=list(xaxis=list(title=paste0('Axis1 ',eigenvalues[1],'%'),
++                                  scale=eigenvalues[1]/100),
++                       yaxis=list(title=paste0('Axis2 ',eigenvalues[2],'%'),
++                                  scale=eigenvalues[2]/100),
++                       zaxis=list(title=paste0('Axis3 ',eigenvalues[3],'%'),
++                                  scale=eigenvalues[3]/100),
++                       aspectratio = list(x=3, y=3*eigenvalues[2]/eigenvalues[1], z=3*eigenvalues[3]/eigenvalues[1])))
+
+##Plot 3D PCoA
+pcoa_euc_frame<-data.frame(pcoa_euc$vectors,month=gsub('\\w\\d|\\w\\d\\d','',rownames(pcoa_euc$vectors)))
+euc_eigenvalues<-round(euc_variances,4)*100
+plot_ly(pcoa_euc_frame,type = "scatter3d", x=~Axis.1,y=~Axis.2,z=~Axis.3,colors=~brewer.pal(6,'Set1'),color=~month)%>%
++     layout(title='PCoA Euclidean Distance',
++            scene=list(xaxis=list(title=paste0('Axis1 ',euc_eigenvalues[1],'%'),
++                                  scale=euc_eigenvalues[1]/100),
++                       yaxis=list(title=paste0('Axis2 ',euc_eigenvalues[2],'%'),
++                                  scale=euc_eigenvalues[2]/100),
++                       zaxis=list(title=paste0('Axis3 ',euc_eigenvalues[3],'%'),
++                                  scale=euc_eigenvalues[3]/100),
++                       aspectratio = list(x=3, 
++                                          y=3*euc_eigenvalues[2]/euc_eigenvalues[1], 
++                                          z=3*euc_eigenvalues[3]/euc_eigenvalues[1])))
+
+##Hierarchical Clustering
+cluster_ex<-hclust(vegdist(t(seq_counts),method='jaccard'),method="average")
+plot(cluster_ex,main='Jaccard Hierarchical Clustering',xlab='',sub='')
+
+##Jaccard/Euclidean NMDS plots
+set.seed(071510)
+euc_nmds<-metaMDS(euc_dmat,k=2,autotransform=FALSE)
+jac_nmds<-metaMDS(jac_dmat,k=2,autotransform=FALSE)
+euc_nmds$stress
+jac_nmds$stress
+euc_frame<-data.frame(euc_nmds$points,
++                       month=gsub('\\w\\d|\\w\\d\\d','',rownames(log_rats)))
+jac_frame<-data.frame(jac_nmds$points,
++                       month=gsub('\\w\\d|\\w\\d\\d','',rownames(log_rats)))
+
+ggplot(euc_frame,aes(x=MDS1,y=MDS2,col=month))+
++     geom_point(size=2)+
++     scale_color_brewer(palette='Set1',name='Month')+
++     theme_bw()+ggtitle('Euclidean Distance NMDS')
+
+ggplot(jac_frame,aes(x=MDS1,y=MDS2,col=month))+
++     geom_point(size=4)+
++     scale_color_brewer(palette='Set1',name='Month')+
++     theme_bw()+ggtitle('Jaccard Distance NMDS')
+
+##Scale/Detrend Data for Clustering
+within_seq_means<-apply(t(seq_counts),2,mean)
+within_seq_vars<-apply(t(seq_counts),2,var)
+plot(within_seq_means,within_seq_vars,log='xy',
++      main='Heteroskedastic Data',
++      xlab='Mean # Counts',
++      ylab='Var # Counts')
+
+seq_counts[seq_counts == 0] <- 1
+transformed_counts<-DESeq2::varianceStabilizingTransformation(as.matrix(seq_counts))
+
+within_trans_means<-apply(transformed_counts,1,mean)
+within_trans_vars<-apply(transformed_counts,1,var)
+plot(within_trans_means,within_trans_vars)
+transformed_detrended<-apply(transformed_counts,1,pracma::detrend)
+trans_dt_scaled<-apply(transformed_detrended,2,scale)
+rownames(trans_dt_scaled)<-colnames(transformed_counts)
+hist(transformed_counts,
++      main='VST Sequence Count Observations',
++      xlab='# Total Observations',
++      ylab='Frequency')
+hist(transformed_detrended,
++      main='VST+Detrended Data',
++      xlab='Total Observations Accounting for Linear Trends',
++      ylab='Frequency')
+hist(trans_dt_scaled,
++      main='VST+Detrended+Scaled Data (Z-scores)',
++      xlab='Expression Level Relative to per-OTU Avg',
++      ylab='Frequency')
+
+##Create distance matrix for clustering
+temporal_dmat<-dist(t(trans_dt_scaled))
+n_clusts<-2:20
+
+##Create clusters using HC method
+hc_full_cluster<-hclust(temporal_dmat)
+hc_clusts<-lapply(n_clusts,function(x) cutree(hc_full_cluster,x))
+
+##Create clusters using k-medoids method
+kmed_clusts<-lapply(n_clusts, function(x) cluster::pam(temporal_dmat,k=x))
+
+##Compare the outputs of both clustering methods
+hc_stats<-lapply(hc_clusts,function(x) fpc::cluster.stats(temporal_dmat,
++                                                           clustering=x))
+kmed_stats<-lapply(kmed_clusts, function(x) fpc::cluster.stats(temporal_dmat,
++                                                                clustering=x$clustering))
+ripping_stats<-function(list,func){
++     ## Essentially all this function does is implements a function (func) on a list
++     ## and coerces the output to a column vector (this will be handy when we want to make a data frame)
++     output<-do.call(rbind,lapply(list,func))
++     return(output)
++ }
+func_list<-rep(list(function(x) x$cluster.number,
++                     function(x) x$within.cluster.ss,
++                     function(x) x$avg.silwidth,
++                     function(x) x$ch),2)
+stats_list<-rep(list(hc_stats,kmed_stats),each=4)
+collected_stats<-purrr::map2(stats_list,func_list,ripping_stats)
+nclusts<-rep(n_clusts,length(collected_stats))
+method<-rep(c('hc','kmed'),each=length(n_clusts)*length(collected_stats)/2)
+index_frame<-data.frame(index=do.call(rbind,collected_stats),
++                         nc=nclusts,
++                         Method=method,
++                         ind=ind_name)
+index_frame %>%
++     filter(ind=='ss') %>%
++     ggplot(aes(x=nc,y=index,col=Method)) +
++     geom_point() +
++     geom_line(aes(group=Method)) +
++     ylab('Within Cluster Sum Square Error') +
++     xlab('Number Clusters')+
++     theme_bw()
+index_frame %>%
++     filter(ind=='ch') %>%
++     ggplot(aes(x=nc,y=index,col=Method)) +
++     geom_point() +
++     geom_line(aes(group=Method)) +
++     ylab('C-H Stat') +
++     xlab('Number Clusters')+
++     theme_bw()
+```
+
+##Create silhouette plots of clusters
+```{r}
+silhouette_profile_kmed8<-cluster::silhouette(kmed_clusts[[5]])
+silhouette_frame<-data.frame(cluster=silhouette_profile_kmed8[,1], neighbor=silhouette_profile_kmed8[,2], dist=silhouette_profile_kmed8[,3],                            otu_id=rownames(silhouette_profile_kmed8))
+new_silframe<-silhouette_frame %>%
++     arrange(dist) %>%
++     group_by(cluster) %>%
++     mutate(idno=1:n(),
++            tot_num=n())
+ggplot(new_silframe,aes(x=idno,y=dist))+
++     geom_bar(stat='identity') +
++     coord_flip() +
++     ggtitle('Silhouette Profiles for Individual Clusters') +
++     facet_wrap(~cluster)
+medoid_otus<-kmed_clusts[[5]]$medoids
+medoid_dynamics<-trans_dt_scaled[,medoid_otus]
+med_out <- write.table(medoid_dynamics, file = "SP2018_2m_Cluster_med_dynamics.txt", sep = '\t') ##write out z-score table
+med_ASV <- write.table(silhouette_frame, file = "SP2018_2m_Cluster_med_ASVs.txt", sep = '\t') ##write out ASVs from each cluster
+```
+
+##NMDS using Hellinger normalization and isoMDS
+```{r}
+tdata_forhel<- t(seq_counts) ##flip row/column
+data.hel<-decostand(tdata_forhel, method="hell") ##normalize data
+library ("MASS")
+dist<-vegdist(data.hel, method="bray", na.rm=FALSE) ##construct distance matrix
+fit<-isoMDS(dist, k=2) ##run NMDS
+x <- fit$points[,1] ##define plotting variable
+y <- fit$points[,2] ##define plotting variable
+plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2", main="Nonmetric MDS", type="n") ##create empty plot
+points(x,y) ##plot points
+text(x, y, labels = row.names(data.hel), cex=0.8) ##plot labels
+```
+
+##Example ANOSIM comparing communities
+```{r}
+ANO_data= read.table("ANOSIM_073018.txt", header=T, row.names=1, sep="\t") ##import ASV table
+ANO_var= read.table("ANOSIM_073018_type.txt", header=T, row.names=1, sep="\t") ##import variables table
+t_ano_data <- t(ANO_data) #flip row/column
+ano = anosim(ano_data, ANO_var$Depth, distance = "bray", permutations = 9999) ##run ANOSIM
+ano ##call results
+```
+
